@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
+const https = require('https');
 
 const app = express();
 app.use(cors());
@@ -15,6 +16,7 @@ let currentMode = 0;
 let isBoardOnline = false;
 let boardWsClient = null;
 let lastHeartbeat = Date.now();
+const SERVER_URL = 'https://esp32-smart-backend.onrender.com/';
 
 function broadcast(data) {
     const message = JSON.stringify(data);
@@ -104,6 +106,15 @@ wss.on('connection', (ws) => {
         }
     });
 });
+
+
+setInterval( () => {
+    https.get(SERVER_URL, (res) => {
+        console.log(`⏱️ Self-ping sent. Status Code: ${res.statusCode}`);
+    }).on('error', (err) => {
+        console.error('Self-ping error:', err.message);
+    });
+}, 10 * 60 * 1000);
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
