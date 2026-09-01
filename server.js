@@ -3,6 +3,7 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const https = require('https');
+const aiRoutes = require('./routes/aiRoutes');
 
 const connectDB = require('./config/db');
 const { initAuthKeys } = require('./controllers/authController');
@@ -16,6 +17,7 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
+
 // Connect DB & Seed Auth Keys
 connectDB().then(() => {
     initAuthKeys();
@@ -26,6 +28,7 @@ initWebSocket(server);
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Health Route for Render
 app.get('/', (req, res) => {
