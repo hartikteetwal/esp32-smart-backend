@@ -52,6 +52,11 @@ wss.on('connection', (ws) => {
         try {
             const data = JSON.parse(raw);
 
+            // Frontend client keep-alive ping
+            if (data.type === 'CLIENT_PING') {
+                return; // No action needed, keeps the socket tunnel active
+            }
+
             // 1. ESP32 Identity & Heartbeat Ping
             if (data.type === 'HEARTBEAT') {
                 lastHeartbeat = Date.now();
