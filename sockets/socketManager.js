@@ -5,18 +5,20 @@ let currentMode = 0;
 let isBoardOnline = false;
 let boardWsClient = null;
 let lastHeartbeat = Date.now();
+let wssInstance = null;
+
+const broadcast = (data) => {
+    if (!wssInstance) return;
+    const message = JSON.stringify(data);
+    wssInstance.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    });
+};
 
 const initWebSocket = (server) => {
-    const wss = new WebSocket.Server({ server });
-
-    const broadcast = (data) => {
-        const message = JSON.stringify(data);
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(message);
-            }
-        });
-    };
+    wssInstance = new WebSocket.Server({ server });
 
     // Heartbeat watchdog interval
     setInterval(() => {
@@ -28,10 +30,9 @@ const initWebSocket = (server) => {
         }
     }, 3000);
 
-    wss.on('connection', (ws) => {
+    wssInstance.on('connection', (ws) => {
         console.log('⚡ New Client Connected');
 
-        // Send initial state
         ws.send(JSON.stringify({
             type: 'INIT_STATE',
             states: relayStates,
@@ -43,10 +44,8 @@ const initWebSocket = (server) => {
             try {
                 const data = JSON.parse(raw);
 
-                // Keep-alive ping from client
                 if (data.type === 'CLIENT_PING') return;
 
-                // ESP32 Heartbeat
                 if (data.type === 'HEARTBEAT') {
                     lastHeartbeat = Date.now();
                     if (!isBoardOnline) {
@@ -57,7 +56,6 @@ const initWebSocket = (server) => {
                     }
                 }
 
-                // Single Relay Toggle
                 if (data.type === 'TOGGLE_RELAY') {
                     const { id, state } = data;
                     if (id >= 0 && id < 8) {
@@ -68,7 +66,6 @@ const initWebSocket = (server) => {
                     }
                 }
 
-                // Master All ON / OFF
                 if (data.type === 'ALL_RELAYS') {
                     const { state } = data;
                     currentMode = state ? 1 : 0;
@@ -77,7 +74,6 @@ const initWebSocket = (server) => {
                     broadcast({ type: 'UPDATE_MODE', mode: currentMode });
                 }
 
-                // Pattern Mode Change
                 if (data.type === 'SET_MODE') {
                     currentMode = Number(data.mode);
                     if (currentMode === 0) relayStates = relayStates.map(() => false);
@@ -106,7 +102,10 @@ const initWebSocket = (server) => {
         });
     });
 
-    return wss;
+    return wssInstance;
 };
 
-module.exports = initWebSocket;
+module.exports = {
+    initWebSocket,
+    broadcast
+};

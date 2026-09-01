@@ -19,8 +19,7 @@ const initAuthKeys = async () => {
     }
 };
 
-// @desc    Dynamic Login (Public / Private)
-// @route   POST /api/auth/login
+// Dynamic Login
 const login = async (req, res) => {
     try {
         const { password } = req.body;
@@ -54,9 +53,8 @@ const login = async (req, res) => {
     }
 };
 
-// @desc    Admin-Only Public Password Update
-// @route   POST /api/auth/update-public-pass
-const updatePublicPass = async (req, res) => {
+// Admin-Only Public Password Update with Force-Logout Event
+const updatePublicPass = (broadcastFn) => async (req, res) => {
     try {
         const { adminPassword, newPublicPassword } = req.body;
 
@@ -79,6 +77,12 @@ const updatePublicPass = async (req, res) => {
         );
 
         console.log('🔒 Public Password Updated via Admin Panel');
+
+        // ⚡ Sabhi connected clients ko Force Logout signal bhejo
+        if (typeof broadcastFn === 'function') {
+            broadcastFn({ type: 'FORCE_LOGOUT_PUBLIC' });
+        }
+
         return res.status(200).json({
             success: true,
             message: 'Public key updated successfully in MongoDB'
