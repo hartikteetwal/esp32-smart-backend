@@ -87,6 +87,19 @@ const initWebSocket = (server) => {
                         boardOnline: isBoardOnline
                     });
                 }
+
+                // Admin update board Wi-Fi
+                if (data.type === 'SET_BOARD_WIFI') {
+                    const { ssid, pass } = data;
+                    if (ssid && pass) {
+                        console.log('📡 Forwarding new Wi-Fi credentials to ESP32...');
+                        broadcast({
+                            type: 'UPDATE_WIFI',
+                            ssid: ssid,
+                            pass: pass
+                        });
+                    }
+                }
             } catch (err) {
                 console.error('Invalid message received:', err.message);
             }
