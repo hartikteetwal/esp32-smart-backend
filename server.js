@@ -7,7 +7,7 @@ const https = require('https');
 const connectDB = require('./config/db');
 const { initAuthKeys } = require('./controllers/authController');
 const authRoutes = require('./routes/authRoutes');
-const initWebSocket = require('./sockets/socketManager');
+const {initWebSocket} = require('./sockets/socketManager');
 
 const app = express();
 const server = http.createServer(app);
