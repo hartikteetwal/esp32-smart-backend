@@ -100,6 +100,23 @@ const initWebSocket = (server) => {
                         });
                     }
                 }
+
+                // ESP32 synced its networks and current connected SSID
+                if (data.type === 'SYNC_NETWORKS') {
+                    broadcast({
+                        type: 'SAVED_NETWORKS_LIST',
+                        networks: data.networks || [],
+                        currentSSID: data.currentSSID || ''
+                    });
+                }
+
+                // Admin wants to delete a network
+                if (data.type === 'DELETE_SAVED_WIFI') {
+                    broadcast({
+                        type: 'DELETE_SAVED_WIFI',
+                        ssid: data.ssid
+                    });
+                }
             } catch (err) {
                 console.error('Invalid message received:', err.message);
             }
