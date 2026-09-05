@@ -130,17 +130,23 @@ const initWebSocket = (server) => {
                 }
 
 
-                // Server.js (Backend)
-                if (parsed.type === 'GET_SAVED_NETWORKS') {
-                    // ESP32 board socket ko forward karo
-                    if (esp32Socket && esp32Socket.readyState === WebSocket.OPEN) {
-                        esp32Socket.send(JSON.stringify(parsed));
-                    }
+                // 🎯 Frontend ne list maangi -> ESP32 ko broadcast karo
+                if (data.type === 'GET_SAVED_NETWORKS') {
+                    console.log('📤 Forwarding GET_SAVED_NETWORKS request to ESP32...');
+                    broadcast({ type: 'GET_SAVED_NETWORKS' });
                 }
 
-                if (parsed.type === 'SAVED_NETWORKS_LIST' || parsed.type === 'SYNC_NETWORKS') {
-                    // Sabhi connected web clients (React Frontend) ko broadcast karo
-                    broadcastToClients(parsed);
+                // 🎯 ESP32 ne list bheji -> Frontend ko broadcast karo
+                if (data.type === 'SAVED_NETWORKS_LIST' || data.type === 'SYNC_NETWORKS') {
+                    if (data.currentSSID) {
+                        currentSSID = data.currentSSID;
+                        console.log(`📶 Active Hotspot Updated: [${currentSSID}]`);
+                    }
+                    broadcast({
+                        type: 'SAVED_NETWORKS_LIST',
+                        networks: data.networks || [],
+                        currentSSID: currentSSID
+                    });
                 }
             } catch (err) {
                 console.error('Invalid message received:', err.message);
