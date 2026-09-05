@@ -148,6 +148,15 @@ const initWebSocket = (server) => {
                         currentSSID: currentSSID
                     });
                 }
+
+                // Admin ne list ke kisi item par click kiya (Switch Hotspot)
+                if (data.type === 'SWITCH_HOTSPOT') {
+                    console.log(`🔀 Manual Switch command for SSID: ${data.ssid}`);
+                    broadcast({
+                        type: 'SWITCH_HOTSPOT',
+                        ssid: data.ssid
+                    });
+                }
             } catch (err) {
                 console.error('Invalid message received:', err.message);
             }
