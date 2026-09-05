@@ -128,6 +128,20 @@ const initWebSocket = (server) => {
                         ssid: data.ssid
                     });
                 }
+
+
+                // Server.js (Backend)
+                if (parsed.type === 'GET_SAVED_NETWORKS') {
+                    // ESP32 board socket ko forward karo
+                    if (esp32Socket && esp32Socket.readyState === WebSocket.OPEN) {
+                        esp32Socket.send(JSON.stringify(parsed));
+                    }
+                }
+
+                if (parsed.type === 'SAVED_NETWORKS_LIST' || parsed.type === 'SYNC_NETWORKS') {
+                    // Sabhi connected web clients (React Frontend) ko broadcast karo
+                    broadcastToClients(parsed);
+                }
             } catch (err) {
                 console.error('Invalid message received:', err.message);
             }
