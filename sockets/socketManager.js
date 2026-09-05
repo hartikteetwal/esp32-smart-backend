@@ -3,6 +3,7 @@ const WebSocket = require('ws');
 let relayStates = [false, false, false, false, false, false, false, false];
 let currentMode = 0;
 let isBoardOnline = false;
+let currentSSID = ''; // ✅ Connected Hotspot Name store karne ke liye
 let boardWsClient = null;
 let lastHeartbeat = Date.now();
 let wssInstance = null;
@@ -24,6 +25,7 @@ const initWebSocket = (server) => {
     setInterval(() => {
         if (isBoardOnline && Date.now() - lastHeartbeat > 7000) {
             isBoardOnline = false;
+            currentSSID = ''; // ✅ Board offline hote hi SSID clear
             boardWsClient = null;
             console.log('❌ ESP32 Board Went Offline!');
             broadcast({ type: 'BOARD_STATUS', online: false });
@@ -33,11 +35,13 @@ const initWebSocket = (server) => {
     wssInstance.on('connection', (ws) => {
         console.log('⚡ New Client Connected');
 
+        // ✅ 1. Frontend refresh hone par currentSSID sath bhejein
         ws.send(JSON.stringify({
             type: 'INIT_STATE',
             states: relayStates,
             mode: currentMode,
-            boardOnline: isBoardOnline
+            boardOnline: isBoardOnline,
+            currentSSID: currentSSID // 👈 Refresh par hotspot name ab 100% milega
         }));
 
         ws.on('message', (raw) => {
@@ -84,7 +88,8 @@ const initWebSocket = (server) => {
                         type: 'INIT_STATE',
                         states: relayStates,
                         mode: currentMode,
-                        boardOnline: isBoardOnline
+                        boardOnline: isBoardOnline,
+                        currentSSID: currentSSID
                     });
                 }
 
@@ -101,17 +106,23 @@ const initWebSocket = (server) => {
                     }
                 }
 
-                // ESP32 synced its networks and current connected SSID
+                // ✅ 2. ESP32 se Hotspot Name receive hote hi backend state me save karein
                 if (data.type === 'SYNC_NETWORKS') {
+                    if (data.currentSSID) {
+                        currentSSID = data.currentSSID; // 👈 Memory me cache ho gaya
+                        console.log(`📶 Stored Active Hotspot in Backend: [${currentSSID}]`);
+                    }
+
                     broadcast({
                         type: 'SAVED_NETWORKS_LIST',
                         networks: data.networks || [],
-                        currentSSID: data.currentSSID || ''
+                        currentSSID: currentSSID
                     });
                 }
 
                 // Admin wants to delete a network
                 if (data.type === 'DELETE_SAVED_WIFI') {
+                    console.log(`🗑️ Delete Wi-Fi requested for SSID: ${data.ssid}`);
                     broadcast({
                         type: 'DELETE_SAVED_WIFI',
                         ssid: data.ssid
@@ -125,6 +136,7 @@ const initWebSocket = (server) => {
         ws.on('close', () => {
             if (ws === boardWsClient) {
                 isBoardOnline = false;
+                currentSSID = ''; // ✅ Socket close par SSID clear
                 boardWsClient = null;
                 console.log('❌ ESP32 Disconnected (Socket Closed)');
                 broadcast({ type: 'BOARD_STATUS', online: false });
