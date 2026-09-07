@@ -3,9 +3,10 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const SYSTEM_INSTRUCTION = `
 You are an ultra-fast smart home voice parser for an 8-channel relay board.
-The user's spoken input may be in English, Hindi, or mixed Hinglish. Understand casual words, accents, and local slangs.
+The user's spoken input may be in English, Hindi, or mixed Hinglish.
+Crucial: Speech recognition often transcribes accents with phonetic typos (e.g. "jo lights" or "zo lights" or "aur lights" actually means "all lights"). Infer the user's real intent intelligently!
 
-CHANNEL MAP (1 to 8 -> id 0 to 7):
+CHANNEL MAP (1 to 8 -> id: 0 to 7):
 - 1, ek, one, fan, first, bedroom -> id: 0
 - 2, do, two, second -> id: 1
 - 3, teen, three, third -> id: 2
@@ -19,9 +20,9 @@ STATE MAP:
 - ON: on, chalu, jalao, kholo, start, enable -> state: true
 - OFF: off, band, bujhao, close, stop, disable -> state: false
 
-GLOBAL / MASTER COMMANDS:
-- All on / Sab chalu / Turn everything on -> actionType: "ALL_RELAYS", state: true
-- All off / Sab band / Turn off all / Goodnight -> actionType: "ALL_RELAYS", state: false
+GLOBAL / MASTER COMMANDS (All lights):
+- "turn on all lights", "turn on jo lights", "turn on so lights", "sab chalu", "saari light on", "pure ghar ki light jalao" -> actionType: "ALL_RELAYS", state: true
+- "turn off all lights", "turn off jo lights", "sab band", "saari light band", "goodnight" -> actionType: "ALL_RELAYS", state: false
 
 LIGHTING ANIMATION MODES (mode 0 to 9):
 - 0: normal, manual
@@ -36,10 +37,10 @@ LIGHTING ANIMATION MODES (mode 0 to 9):
 - 9: auto cycle, party mode, dance
 
 CRITICAL LANGUAGE RULE FOR SPEECH REPLY:
-- "speechReply" MUST ALWAYS BE IN ENGLISH ONLY. Do NOT use Hindi or Hinglish.
-- Keep it short and crisp (e.g., "Turning on Relay 1, Boss." or "Starting Knight Rider pattern.").
+- "speechReply" MUST ALWAYS BE IN NATURAL ENGLISH ONLY. No Hindi or Hinglish in the reply text!
+- Keep it short, crisp, and polite (e.g., "Turning on all lights, Boss." or "Turning on Relay 1, Boss.").
 
-Expected JSON Schema:
+Expected Output JSON Schema:
 {
   "actionType": "TOGGLE_RELAY" | "ALL_RELAYS" | "SET_MODE" | "UNKNOWN",
   "id": number | null,
@@ -49,16 +50,13 @@ Expected JSON Schema:
 }
 `;
 
-// Candidate models in order of speed and capability
-const CANDIDATE_MODELS = ['gemini-2.0-flash', 'gemini-2.5-flash'];
-
 const processVoiceCommand = async (req, res) => {
     try {
         const { transcript } = req.body;
         const apiKey = process.env.GEMINI_API_KEY;
 
         if (!apiKey) {
-            console.error('❌ GEMINI_API_KEY missing');
+            console.error('❌ GEMINI_API_KEY is missing in environment variables');
             return res.status(500).json({
                 success: false,
                 speechReply: 'API key is missing on the server, Boss.'
@@ -72,33 +70,18 @@ const processVoiceCommand = async (req, res) => {
         console.log(`🎙️ Processing transcript: "${transcript}"`);
         const genAI = new GoogleGenerativeAI(apiKey);
 
-        let result = null;
-        let lastError = null;
-
-        // Auto-fallback across available flash models
-        for (const modelName of CANDIDATE_MODELS) {
-            try {
-                const model = genAI.getGenerativeModel({
-                    model: modelName,
-                    generationConfig: {
-                        responseMimeType: 'application/json',
-                        temperature: 0.1,
-                        maxOutputTokens: 120
-                    }
-                });
-
-                const prompt = `${SYSTEM_INSTRUCTION}\nUser Input: "${transcript}"`;
-                result = await model.generateContent(prompt);
-                if (result) break;
-            } catch (err) {
-                lastError = err;
-                console.warn(`⚠️ Model ${modelName} failed, attempting next available model...`);
+        // 🎯 Using the active and supported flash model
+        const model = genAI.getGenerativeModel({
+            model: 'gemini-3.6-flash',
+            generationConfig: {
+                responseMimeType: 'application/json',
+                temperature: 0.1,
+                maxOutputTokens: 120
             }
-        }
+        });
 
-        if (!result) {
-            throw lastError || new Error('No candidate Gemini models responded successfully.');
-        }
+        const prompt = `${SYSTEM_INSTRUCTION}\nUser Input: "${transcript}"`;
+        const result = await model.generateContent(prompt);
 
         const rawResponse = result.response.text();
         console.log('🤖 Raw AI Output:', rawResponse);
