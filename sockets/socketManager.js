@@ -157,6 +157,14 @@ const initWebSocket = (server) => {
                         ssid: data.ssid
                     });
                 }
+                // Pattern speed adjustment forwarder
+                if (data.type === 'SET_PATTERN_SPEED') {
+                    broadcast({
+                        type: 'SET_PATTERN_SPEED',
+                        mode: data.mode,
+                        speed: data.speed
+                    });
+                }
             } catch (err) {
                 console.error('Invalid message received:', err.message);
             }
