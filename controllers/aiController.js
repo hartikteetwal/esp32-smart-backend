@@ -1,45 +1,62 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-// Instance bahar initialize karne se har request par cold-start lag nahi hoga
+
+// 🎯 Model name strictly gemini-1.5-flash rakha hai jo production me reliable aur fast hai
 const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-1.5-flash',
     generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.1,
-        maxOutputTokens: 120
+        maxOutputTokens: 100
     }
 });
 
 const SYSTEM_INSTRUCTION = `
-You are an ultra-fast IoT parser for an 8-channel relay board & lighting patterns.
-Input may be in English, Hindi, or broken Hinglish. Understand phonetic typos and local slangs.
+You are an ultra-fast smart home voice parser for an 8-channel relay board.
+The user's spoken input may be in English, Hindi, or mixed Hinglish. Understand casual words, accents, and local slangs.
 
-CHANNELS (1-8 -> id: 0-7):
-1/ek/fan/first -> 0 | 2/do/second -> 1 | 3/teen/third -> 2 | 4/char/fourth -> 3
-5/panch/fifth -> 4 | 6/che/sixth -> 5 | 7/saat/seventh -> 6 | 8/aath/last -> 7
+CHANNEL MAP (1 to 8 -> id 0 to 7):
+- 1, ek, one, fan, first, bedroom -> id: 0
+- 2, do, two, second -> id: 1
+- 3, teen, three, third -> id: 2
+- 4, char, four, fourth -> id: 3
+- 5, panch, five, fifth -> id: 4
+- 6, che, six, sixth -> id: 5
+- 7, saat, seven, seventh -> id: 6
+- 8, aath, eight, last -> id: 7
 
-STATE:
-ON: on, open, chalu, jalao, chala do, start -> true
-OFF: off, band, bujhao, rok do, stop -> false
+STATE MAP:
+- ON: on, chalu, jalao, kholo, start, enable -> state: true
+- OFF: off, band, bujhao, close, stop, disable -> state: false
 
-GLOBAL:
-all on, saari jalao, sab chalu -> actionType: "ALL_RELAYS", state: true
-all off, saari band, sab bujha do, goodnight -> actionType: "ALL_RELAYS", state: false
+GLOBAL / MASTER COMMANDS:
+- All on / Sab chalu / Turn everything on -> actionType: "ALL_RELAYS", state: true
+- All off / Sab band / Turn off all / Goodnight -> actionType: "ALL_RELAYS", state: false
 
-PATTERNS (mode: 0-9):
-0: normal/manual | 1: full on | 2: waterfall/cascade/jharna
-3: ping pong/knight rider/scanner | 4: center out/burst
-5: police/alternate/strobe | 6: tetris/stack | 7: runner/dual dots
-8: disco/random/sparkle | 9: auto/party/shuffle
+LIGHTING ANIMATION MODES (mode 0 to 9):
+- 0: normal, manual
+- 1: full on, static
+- 2: waterfall, cascade, jharna
+- 3: ping pong, knight rider, scanner
+- 4: center out, burst
+- 5: police light, strobe, alternate
+- 6: tetris, stack
+- 7: running dots, runner, train
+- 8: disco, random, sparkle
+- 9: auto cycle, party mode, dance
 
-Output JSON Schema:
+CRITICAL LANGUAGE RULE FOR SPEECH REPLY:
+- "speechReply" MUST ALWAYS BE IN ENGLISH ONLY. Do NOT use Hindi or Hinglish in the reply text.
+- Keep it short, crisp, and polite (e.g., "Turning on Relay 1, Boss." or "Starting Knight Rider pattern.").
+
+Expected JSON Schema:
 {
   "actionType": "TOGGLE_RELAY" | "ALL_RELAYS" | "SET_MODE" | "UNKNOWN",
   "id": number | null,
   "state": boolean | null,
   "mode": number | null,
-  "speechReply": "Crisp 1-sentence reply in Hindi/English"
+  "speechReply": string
 }
 `;
 
@@ -48,7 +65,10 @@ const processVoiceCommand = async (req, res) => {
         const { transcript } = req.body;
 
         if (!transcript || !transcript.trim()) {
-            return res.status(400).json({ success: false, message: 'Transcript is required' });
+            return res.status(400).json({
+                success: false,
+                message: 'Transcript is required'
+            });
         }
 
         const prompt = `${SYSTEM_INSTRUCTION}\nUser Input: "${transcript}"`;
@@ -61,14 +81,15 @@ const processVoiceCommand = async (req, res) => {
             id: parsed.id ?? null,
             state: parsed.state ?? null,
             mode: parsed.mode ?? null,
-            speechReply: parsed.speechReply || 'Command executed!'
+            speechReply: parsed.speechReply || 'Command executed, Boss.'
         });
 
     } catch (err) {
-        console.error('❌ Fast AI Error:', err.message);
+        // Detailed log taaki exact API error console par dikh sake
+        console.error('❌ Gemini Execution Error:', err.message);
         return res.status(500).json({
             success: false,
-            speechReply: 'Thoda issue hua, dobara boliye!'
+            speechReply: 'Sorry Boss, I could not process that command. Please try again.'
         });
     }
 };
