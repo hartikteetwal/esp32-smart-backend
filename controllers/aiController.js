@@ -1,16 +1,5 @@
+require('dotenv').config();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
-// 🎯 Model name strictly gemini-1.5-flash rakha hai jo production me reliable aur fast hai
-const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
-    generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.1,
-        maxOutputTokens: 100
-    }
-});
 
 const SYSTEM_INSTRUCTION = `
 You are an ultra-fast smart home voice parser for an 8-channel relay board.
@@ -63,6 +52,15 @@ Expected JSON Schema:
 const processVoiceCommand = async (req, res) => {
     try {
         const { transcript } = req.body;
+        const apiKey = process.env.GEMINI_API_KEY;
+
+        if (!apiKey) {
+            console.error('❌ CRITICAL: GEMINI_API_KEY is missing or undefined in process.env!');
+            return res.status(500).json({
+                success: false,
+                speechReply: 'API key is missing on the server, Boss.'
+            });
+        }
 
         if (!transcript || !transcript.trim()) {
             return res.status(400).json({
@@ -71,22 +69,45 @@ const processVoiceCommand = async (req, res) => {
             });
         }
 
+        console.log(`🎙️ Processing voice transcript: "${transcript}"`);
+
+        // Initialize inside handler to guarantee env variable availability
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+            model: 'gemini-1.5-flash',
+            generationConfig: {
+                responseMimeType: 'application/json',
+                temperature: 0.1,
+                maxOutputTokens: 120
+            }
+        });
+
         const prompt = `${SYSTEM_INSTRUCTION}\nUser Input: "${transcript}"`;
         const result = await model.generateContent(prompt);
-        const parsed = JSON.parse(result.response.text());
+        const rawResponse = result.response.text();
+
+        console.log('🤖 Raw AI Output:', rawResponse);
+
+        let parsed;
+        try {
+            parsed = JSON.parse(rawResponse);
+        } catch (jsonErr) {
+            const cleaned = rawResponse.replace(/```json/gi, '').replace(/```/gi, '').trim();
+            parsed = JSON.parse(cleaned);
+        }
 
         return res.status(200).json({
             success: true,
             actionType: parsed.actionType || 'UNKNOWN',
-            id: parsed.id ?? null,
-            state: parsed.state ?? null,
-            mode: parsed.mode ?? null,
+            id: parsed.id !== undefined ? parsed.id : null,
+            state: parsed.state !== undefined ? parsed.state : null,
+            mode: parsed.mode !== undefined ? parsed.mode : null,
             speechReply: parsed.speechReply || 'Command executed, Boss.'
         });
 
     } catch (err) {
-        // Detailed log taaki exact API error console par dikh sake
-        console.error('❌ Gemini Execution Error:', err.message);
+        // This will print the exact Google API rejection in your terminal
+        console.error('❌ Detailed Gemini API Error:', err);
         return res.status(500).json({
             success: false,
             speechReply: 'Sorry Boss, I could not process that command. Please try again.'
