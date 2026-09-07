@@ -3,10 +3,22 @@ const WebSocket = require('ws');
 let relayStates = [false, false, false, false, false, false, false, false];
 let currentMode = 0;
 let isBoardOnline = false;
-let currentSSID = ''; // ✅ Connected Hotspot Name store karne ke liye
+let currentSSID = '';
 let boardWsClient = null;
 let lastHeartbeat = Date.now();
 let wssInstance = null;
+
+// ✅ Global Pattern Speeds Cache (Har mode ki apni speed)
+let patternSpeeds = {
+    2: 350,
+    3: 250,
+    4: 400,
+    5: 600,
+    6: 200,
+    7: 300,
+    8: 450,
+    9: 350
+};
 
 const broadcast = (data) => {
     if (!wssInstance) return;
@@ -25,7 +37,7 @@ const initWebSocket = (server) => {
     setInterval(() => {
         if (isBoardOnline && Date.now() - lastHeartbeat > 7000) {
             isBoardOnline = false;
-            currentSSID = ''; // ✅ Board offline hote hi SSID clear
+            currentSSID = '';
             boardWsClient = null;
             console.log('❌ ESP32 Board Went Offline!');
             broadcast({ type: 'BOARD_STATUS', online: false });
@@ -35,13 +47,14 @@ const initWebSocket = (server) => {
     wssInstance.on('connection', (ws) => {
         console.log('⚡ New Client Connected');
 
-        // ✅ 1. Frontend refresh hone par currentSSID sath bhejein
+        // ✅ Naye phone/tab ko states + latest patternSpeeds bhejo
         ws.send(JSON.stringify({
             type: 'INIT_STATE',
             states: relayStates,
             mode: currentMode,
             boardOnline: isBoardOnline,
-            currentSSID: currentSSID // 👈 Refresh par hotspot name ab 100% milega
+            currentSSID: currentSSID,
+            patternSpeeds: patternSpeeds // 👈 Hydrates UI with current speeds
         }));
 
         ws.on('message', (raw) => {
@@ -89,7 +102,8 @@ const initWebSocket = (server) => {
                         states: relayStates,
                         mode: currentMode,
                         boardOnline: isBoardOnline,
-                        currentSSID: currentSSID
+                        currentSSID: currentSSID,
+                        patternSpeeds: patternSpeeds
                     });
                 }
 
@@ -106,10 +120,10 @@ const initWebSocket = (server) => {
                     }
                 }
 
-                // ✅ 2. ESP32 se Hotspot Name receive hote hi backend state me save karein
+                // Hotspot sync packets
                 if (data.type === 'SYNC_NETWORKS') {
                     if (data.currentSSID) {
-                        currentSSID = data.currentSSID; // 👈 Memory me cache ho gaya
+                        currentSSID = data.currentSSID;
                         console.log(`📶 Stored Active Hotspot in Backend: [${currentSSID}]`);
                     }
 
@@ -120,7 +134,7 @@ const initWebSocket = (server) => {
                     });
                 }
 
-                // Admin wants to delete a network
+                // Delete saved Wi-Fi
                 if (data.type === 'DELETE_SAVED_WIFI') {
                     console.log(`🗑️ Delete Wi-Fi requested for SSID: ${data.ssid}`);
                     broadcast({
@@ -129,15 +143,13 @@ const initWebSocket = (server) => {
                     });
                 }
 
-
-                // 🎯 Frontend ne list maangi -> ESP32 ko broadcast karo
+                // Forward list requests
                 if (data.type === 'GET_SAVED_NETWORKS') {
                     console.log('📤 Forwarding GET_SAVED_NETWORKS request to ESP32...');
                     broadcast({ type: 'GET_SAVED_NETWORKS' });
                 }
 
-                // 🎯 ESP32 ne list bheji -> Frontend ko broadcast karo
-                if (data.type === 'SAVED_NETWORKS_LIST' || data.type === 'SYNC_NETWORKS') {
+                if (data.type === 'SAVED_NETWORKS_LIST') {
                     if (data.currentSSID) {
                         currentSSID = data.currentSSID;
                         console.log(`📶 Active Hotspot Updated: [${currentSSID}]`);
@@ -149,7 +161,7 @@ const initWebSocket = (server) => {
                     });
                 }
 
-                // Admin ne list ke kisi item par click kiya (Switch Hotspot)
+                // Switch Hotspot
                 if (data.type === 'SWITCH_HOTSPOT') {
                     console.log(`🔀 Manual Switch command for SSID: ${data.ssid}`);
                     broadcast({
@@ -157,13 +169,22 @@ const initWebSocket = (server) => {
                         ssid: data.ssid
                     });
                 }
-                // Pattern speed adjustment forwarder
+
+                // ⚡ Pattern Speed Adjustment Handler
                 if (data.type === 'SET_PATTERN_SPEED') {
-                    broadcast({
-                        type: 'SET_PATTERN_SPEED',
-                        mode: data.mode,
-                        speed: data.speed
-                    });
+                    const mode = Number(data.mode);
+                    const speed = Number(data.speed);
+
+                    if (mode >= 2 && mode <= 9 && speed >= 100 && speed <= 1000) {
+                        patternSpeeds[mode] = speed;
+                        console.log(`⚡ Saved speed for Mode ${mode}: ${speed}ms`);
+
+                        broadcast({
+                            type: 'SET_PATTERN_SPEED',
+                            mode: mode,
+                            speed: speed
+                        });
+                    }
                 }
             } catch (err) {
                 console.error('Invalid message received:', err.message);
@@ -173,7 +194,7 @@ const initWebSocket = (server) => {
         ws.on('close', () => {
             if (ws === boardWsClient) {
                 isBoardOnline = false;
-                currentSSID = ''; // ✅ Socket close par SSID clear
+                currentSSID = '';
                 boardWsClient = null;
                 console.log('❌ ESP32 Disconnected (Socket Closed)');
                 broadcast({ type: 'BOARD_STATUS', online: false });
