@@ -36,8 +36,8 @@ LIGHTING ANIMATION MODES (mode 0 to 9):
 - 9: auto cycle, party mode, dance
 
 CRITICAL LANGUAGE RULE FOR SPEECH REPLY:
-- "speechReply" MUST ALWAYS BE IN ENGLISH ONLY. Do NOT use Hindi or Hinglish in the reply text.
-- Keep it short, crisp, and polite (e.g., "Turning on Relay 1, Boss." or "Starting Knight Rider pattern.").
+- "speechReply" MUST ALWAYS BE IN ENGLISH ONLY. Do NOT use Hindi or Hinglish.
+- Keep it short and crisp (e.g., "Turning on Relay 1, Boss." or "Starting Knight Rider pattern.").
 
 Expected JSON Schema:
 {
@@ -49,13 +49,16 @@ Expected JSON Schema:
 }
 `;
 
+// Candidate models in order of speed and capability
+const CANDIDATE_MODELS = ['gemini-2.0-flash', 'gemini-2.5-flash'];
+
 const processVoiceCommand = async (req, res) => {
     try {
         const { transcript } = req.body;
         const apiKey = process.env.GEMINI_API_KEY;
 
         if (!apiKey) {
-            console.error('❌ CRITICAL: GEMINI_API_KEY is missing or undefined in process.env!');
+            console.error('❌ GEMINI_API_KEY missing');
             return res.status(500).json({
                 success: false,
                 speechReply: 'API key is missing on the server, Boss.'
@@ -63,29 +66,41 @@ const processVoiceCommand = async (req, res) => {
         }
 
         if (!transcript || !transcript.trim()) {
-            return res.status(400).json({
-                success: false,
-                message: 'Transcript is required'
-            });
+            return res.status(400).json({ success: false, message: 'Transcript is required' });
         }
 
-        console.log(`🎙️ Processing voice transcript: "${transcript}"`);
-
-        // Initialize inside handler to guarantee env variable availability
+        console.log(`🎙️ Processing transcript: "${transcript}"`);
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-1.5-flash',
-            generationConfig: {
-                responseMimeType: 'application/json',
-                temperature: 0.1,
-                maxOutputTokens: 120
+
+        let result = null;
+        let lastError = null;
+
+        // Auto-fallback across available flash models
+        for (const modelName of CANDIDATE_MODELS) {
+            try {
+                const model = genAI.getGenerativeModel({
+                    model: modelName,
+                    generationConfig: {
+                        responseMimeType: 'application/json',
+                        temperature: 0.1,
+                        maxOutputTokens: 120
+                    }
+                });
+
+                const prompt = `${SYSTEM_INSTRUCTION}\nUser Input: "${transcript}"`;
+                result = await model.generateContent(prompt);
+                if (result) break;
+            } catch (err) {
+                lastError = err;
+                console.warn(`⚠️ Model ${modelName} failed, attempting next available model...`);
             }
-        });
+        }
 
-        const prompt = `${SYSTEM_INSTRUCTION}\nUser Input: "${transcript}"`;
-        const result = await model.generateContent(prompt);
+        if (!result) {
+            throw lastError || new Error('No candidate Gemini models responded successfully.');
+        }
+
         const rawResponse = result.response.text();
-
         console.log('🤖 Raw AI Output:', rawResponse);
 
         let parsed;
@@ -106,8 +121,7 @@ const processVoiceCommand = async (req, res) => {
         });
 
     } catch (err) {
-        // This will print the exact Google API rejection in your terminal
-        console.error('❌ Detailed Gemini API Error:', err);
+        console.error('❌ Detailed Gemini API Error:', err.message || err);
         return res.status(500).json({
             success: false,
             speechReply: 'Sorry Boss, I could not process that command. Please try again.'
