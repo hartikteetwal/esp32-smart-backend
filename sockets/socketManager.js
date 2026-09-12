@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 
 let relayStates = [false, false, false, false, false, false, false, false];
 let currentMode = 0;
+let activeAutoMode = 2; // 👈 Auto-cycle ka running pattern track karne ke liye
 let isBoardOnline = false;
 let currentSSID = '';
 let boardWsClient = null;
@@ -54,6 +55,7 @@ const initWebSocket = (server) => {
             type: 'INIT_STATE',
             states: relayStates,
             mode: currentMode,
+            activeAutoMode: activeAutoMode, // 👈 Naye phone ko exact pattern milega
             boardOnline: isBoardOnline,
             currentSSID: currentSSID,
             patternSpeeds: patternSpeeds, // 👈 Hydrates UI with current speeds
@@ -201,6 +203,15 @@ const initWebSocket = (server) => {
                             duration: duration
                         });
                     }
+                }
+                // ws.on('message') ke andar:
+                if (data.type === 'AUTO_CYCLE_TICK') {
+                    activeAutoMode = Number(data.activeMode);
+                    // Sabhi connected phones ko live tick broadcast karo
+                    broadcast({
+                        type: 'AUTO_CYCLE_TICK',
+                        activeMode: activeAutoMode
+                    });
                 }
             } catch (err) {
                 console.error('Invalid message received:', err.message);
