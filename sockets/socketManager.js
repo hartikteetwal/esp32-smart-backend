@@ -7,6 +7,8 @@ let currentSSID = '';
 let boardWsClient = null;
 let lastHeartbeat = Date.now();
 let wssInstance = null;
+// patternSpeeds ke theek neeche add karein:
+let autoCycleDuration = 60000; // Default 60 seconds
 
 // ✅ Global Pattern Speeds Cache (Har mode ki apni speed)
 let patternSpeeds = {
@@ -54,7 +56,8 @@ const initWebSocket = (server) => {
             mode: currentMode,
             boardOnline: isBoardOnline,
             currentSSID: currentSSID,
-            patternSpeeds: patternSpeeds // 👈 Hydrates UI with current speeds
+            patternSpeeds: patternSpeeds, // 👈 Hydrates UI with current speeds
+            cycleDuration: autoCycleDuration
         }));
 
         ws.on('message', (raw) => {
@@ -183,6 +186,19 @@ const initWebSocket = (server) => {
                             type: 'SET_PATTERN_SPEED',
                             mode: mode,
                             speed: speed
+                        });
+                    }
+                }
+                // ⏱️ Auto-Cycle Interval Forwarder (ESP32 + Sabhi Frontends ko forward karo)
+                if (data.type === 'SET_CYCLE_DURATION') {
+                    const duration = Number(data.duration);
+                    if (duration >= 30000 && duration <= 300000) {
+                        autoCycleDuration = duration;
+                        console.log(`⏱️ Auto-Cycle Duration updated: ${duration / 1000}s`);
+
+                        broadcast({
+                            type: 'SET_CYCLE_DURATION',
+                            duration: duration
                         });
                     }
                 }
