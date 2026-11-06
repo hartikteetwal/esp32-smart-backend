@@ -213,6 +213,14 @@ const initWebSocket = (server) => {
                         activeMode: activeAutoMode
                     });
                 }
+
+                // 🎵 Music VU Level Forwarder
+                if (data.type === 'SET_VU_LEVEL') {
+                    broadcast({
+                        type: 'SET_VU_LEVEL',
+                        level: data.level
+                    });
+                }
             } catch (err) {
                 console.error('Invalid message received:', err.message);
             }
