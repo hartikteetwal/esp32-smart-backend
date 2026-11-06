@@ -221,6 +221,12 @@ const initWebSocket = (server) => {
                         level: data.level
                     });
                 }
+                if (data.type === 'SET_DRAW_CHANNEL') {
+                    broadcast({
+                        type: 'SET_DRAW_CHANNEL',
+                        channel: data.channel
+                    });
+                }
             } catch (err) {
                 console.error('Invalid message received:', err.message);
             }
