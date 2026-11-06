@@ -227,6 +227,13 @@ const initWebSocket = (server) => {
                         channel: data.channel
                     });
                 }
+
+                if (data.type === 'SET_RAW_MASK') {
+                    broadcast({
+                        type: 'SET_RAW_MASK',
+                        mask: data.mask
+                    });
+                }
             } catch (err) {
                 console.error('Invalid message received:', err.message);
             }
